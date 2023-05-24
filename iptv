@@ -54,13 +54,11 @@ save_channels() {
 }
 
 send(){
-
     send-to-kodi.sh -s
     sleep 2s
     send-to-kodi.sh "$selected_channel_url"
     # mpv "$selected_channel_url" > /dev/null 2>&1 &
     # echo $! >"$player_pid_file"
-
 }
 
 main() {
