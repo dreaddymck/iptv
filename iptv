@@ -3,9 +3,6 @@ command -v fzf >/dev/null 2>&1 || {
     echo >&2 "fzf required but not installed"
     exit 1
 }
-# command -v mpv >/dev/null 2>&1 || { echo >&2 "mpv required but not installed"; exit 1; }
-
-# export FZF_DEFAULT_OPTS="--history=$HOME/.fzf_history"
 
 m3u=$1
 
@@ -13,7 +10,6 @@ config_path="$HOME/.config/iptv/"
 channels_file="$config_path/channels"
 m3u_url_file="$config_path/m3u_url"
 tmp_playlist="/tmp/iptvplaylist"
-# player_pid_file="/tmp/iptvplayerpid"
 
 mkdir -p "$config_path"
 
@@ -26,7 +22,7 @@ usage: iptv [M3U_URL]
 EOF
 }
 
-save_channels() {
+iptv_save_channels() {
     m3u_url=$(cat "$m3u_url_file")
 
     printf "\nLoading channels... "
@@ -39,12 +35,21 @@ save_channels() {
     url=""
 
     while IFS= read -r line; do
-        if [[ "$line" =~ tvg-name=\"([^\"]+)\" || "$line" =~ tvg-id=\"([^\"]+)\" || "$line" =~ \(360p\) ]]; then
-            name="${BASH_REMATCH[1]}"
+        if [[ "$line" =~ tvg-name=\"([^\"]+)\" || "$line" =~ tvg-id=\"([^\"]+)\" ]]; then
+            
+            name="${BASH_REMATCH[1]}"                
             url=""
+            title=""
+
+            # pattern="group-title=\"([^\"]+)\""
+            pattern="group-title=([^*$]+)"
+            if [[ "$line" =~  $pattern ]]; then
+                title=" - ${BASH_REMATCH[1]}"
+            fi
+                        
         elif [[ "$line" == http* ]]; then
             url="$line"
-            channels+=("$name [CH:${#channels[@]}] url:$url")
+            channels+=("$name$title - [CH:${#channels[@]}] url:$url")
         fi
     done <"$tmp_playlist"
 
@@ -53,15 +58,15 @@ save_channels() {
     printf "%s\n" "${channels[@]}" >$channels_file
 }
 
-send(){
+iptv_send(){
     send-to-kodi.sh -s
     sleep 2s
     send-to-kodi.sh "$selected_channel_url"
-    # mpv "$selected_channel_url" > /dev/null 2>&1 &
-    # echo $! >"$player_pid_file"
 }
 
-main() {
+iptv_main() {
+
+    #TODO: filter $channel_file for preferred resolution before displaying
 
     selected=$(cat "$channels_file" | sed 's/ [^ ]*$//' | fzf)
 
@@ -73,17 +78,10 @@ main() {
     selected_channel_line=$(cat "$channels_file" | grep -F "$selected_channel")
     selected_channel_url=$(echo "$selected_channel_line" | grep -oE 'url:(.*)' | sed 's/url://' | tr -d '\r')
     selected_channel_name=$(echo "$selected_channel_line" | sed 's/\(.*\) url:.*/\1/')
-  
-    # if [ -f "$player_pid_file" ]; then
-    #     player_pid=$(cat "$player_pid_file")
-    #     if kill -0 "$player_pid" >/dev/null 2>&1; then
-    #         kill "$player_pid"
-    #     fi
-    # fi
     
     printf "Sending %s to Kodi\n" "$selected_channel_name"
-    send $selected_channel_url
-    main
+    iptv_send $selected_channel_url
+    iptv_main
 }
 
 if [ -z "$m3u" ] && [ ! -s "$channels_file" ]; then
@@ -98,14 +96,21 @@ fi
 
 if [ ! -z "$m3u" ]; then
     echo "$m3u" >$m3u_url_file
-    save_channels
+    iptv_save_channels
     echo "Playlist saved. Now run iptv again without a M3U URL."
     exit
 fi
 
 if [[ $(find "$channels_file" -mtime +1) ]]; then
     printf "Doing a daily update of channels..\n"
-    save_channels
+    iptv_save_channels
 fi
 
-main
+HEIGHT=360
+
+if((HEIGHT)); then
+    echo $channels_file
+fi
+
+
+iptv_main
